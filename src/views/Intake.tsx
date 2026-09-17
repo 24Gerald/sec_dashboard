@@ -8,7 +8,7 @@
  * duplicate — resolving the original when the report says the fix worked, and
  * always stamping today's date so the work shows up.
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Evidence, Finding, Report, RetestOutcome, Severity } from '@/types';
@@ -19,6 +19,7 @@ import { Badge, Button, Card, Field, SeverityBadge } from '@/components/ui';
 import { Icon } from '@/components/Icon';
 import { FindingForm } from './FindingForm';
 import { ACCEPT_ATTR, extractText, type IntakeFileType } from '@/lib/intake/extract';
+import { fileToDataUrl, isImageFile, prepareShot, revokeShot, type PreparedShot } from '@/lib/intake/images';
 import { parseReport, type Candidate, type ParsedReport } from '@/lib/intake/parse';
 import { applyRetest, findingFromDraft, matchExisting, MATCH_THRESHOLD, OUTCOME_LABEL, type FindingMatch } from '@/lib/intake/match';
 import { nextId, ID_PREFIX } from '@/lib/ids';
@@ -48,14 +49,17 @@ export function Intake() {
   const [matches, setMatches] = useState<FindingMatch[][]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [shots, setShots] = useState<PreparedShot[]>([]);
   const [pasteText, setPasteText] = useState('');
   const [pasting, setPasting] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [shotDragging, setShotDragging] = useState(false);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [fullForm, setFullForm] = useState<Partial<Finding> | null>(null);
   const [reporter, setReporter] = useState('');
+  const shotInput = useRef<HTMLInputElement>(null);
 
   const engagementType = useCallback((id?: string) => (id ? index.engagementById.get(id)?.type : undefined), [index]);
 
@@ -87,7 +91,47 @@ export function Intake() {
     } finally { setReading(false); }
   }, [ingest, toast]);
 
-  const reset = () => { setParsed(null); setMatches([]); setDecisions([]); setSourceFile(null); setPasteText(''); setPasting(false); };
+  const clearShots = useCallback((list: PreparedShot[]) => { list.forEach(revokeShot); }, []);
+  const reset = () => {
+    clearShots(shots);
+    setParsed(null); setMatches([]); setDecisions([]); setSourceFile(null); setShots([]);
+    setPasteText(''); setPasting(false);
+  };
+
+  const addShots = useCallback(async (files: File[]) => {
+    const images = files.filter(isImageFile);
+    if (!images.length) { toast('Drop a PNG, JPG, GIF or WebP screenshot', 'neutral'); return; }
+    try {
+      const prepared = await Promise.all(images.map((f) => prepareShot(f)));
+      setShots((prev) => [...prev, ...prepared]);
+      toast(prepared.length === 1 ? 'Screenshot attached' : `${prepared.length} screenshots attached`, 'good');
+    } catch (e) {
+      toast(`Couldn’t attach image: ${String((e as Error).message ?? e)}`, 'bad');
+    }
+  }, [toast]);
+
+  const removeShot = (id: string) => {
+    setShots((prev) => {
+      const gone = prev.find((s) => s.id === id);
+      if (gone) revokeShot(gone);
+      return prev.filter((s) => s.id !== id);
+    });
+  };
+
+  // Paste screenshots from the clipboard while reviewing a report (Cmd/Ctrl+V).
+  useEffect(() => {
+    if (!parsed) return;
+    const onPaste = (e: globalThis.ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable)) return;
+      const files = [...(e.clipboardData?.files ?? [])].filter(isImageFile);
+      if (!files.length) return;
+      e.preventDefault();
+      void addShots(files);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [parsed, addShots]);
 
   const setDecision = (i: number, patch: Partial<Decision>) =>
     setDecisions((prev) => prev.map((d, j) => (j === i ? { ...d, ...patch } : d)));
@@ -108,6 +152,28 @@ export function Intake() {
         ? [{ type: 'file' as const, title: sourceFile?.name ?? 'Submitted report', description: 'The document submitted through report intake', path: originalPath.replace(/^.*evidence\//, '') }]
         : [];
 
+      // Screenshots: upload when the authoring server is up; otherwise keep an inline data URL.
+      const shotEvidence: Evidence[] = [];
+      for (const shot of shots) {
+        const uploaded = await upload(shot.file, 'screenshots');
+        if (uploaded) {
+          shotEvidence.push({
+            type: 'screenshot',
+            title: shot.name,
+            description: 'Attached during report intake',
+            path: uploaded.replace(/^.*evidence\//, ''),
+          });
+        } else {
+          shotEvidence.push({
+            type: 'screenshot',
+            title: shot.name,
+            description: online ? 'Upload failed — kept inline' : 'Attached during report intake (local draft)',
+            url: await fileToDataUrl(shot.file),
+          });
+        }
+      }
+      const extras: Evidence[] = [...original, ...shotEvidence];
+
       const takenIds = data.findings.map((f) => f.id);
       const savedIds: string[] = [];
       let firstFinding: string | undefined;
@@ -126,16 +192,17 @@ export function Intake() {
             reportId: file ? reportId : undefined,
             confidence: match ? Number(match.score.toFixed(2)) : undefined,
           });
-          await save('finding', mergeEvidence(updated, [...(candidate.draft.evidence ?? []), ...original]));
+          await save('finding', mergeEvidence(updated, [...(candidate.draft.evidence ?? []), ...extras]));
           firstFinding ??= updated.id;
           savedIds.push(updated.id);
         } else {
           const id = nextId(ID_PREFIX.finding, [...takenIds, ...savedIds]);
+          const bundled = [...(candidate.draft.evidence ?? []), ...extras];
           const finding = findingFromDraft(
             {
               ...candidate.draft, title: d.title, severity: d.severity, discovered: d.date,
               reporter: reporter || candidate.draft.reporter,
-              evidence: [...(candidate.draft.evidence ?? []), ...original].length ? [...(candidate.draft.evidence ?? []), ...original] : undefined,
+              evidence: bundled.length ? bundled : undefined,
             },
             id,
             { fileName: parsed.fileName, fileType: parsed.type, importedAt: new Date().toISOString(), extracted: candidate.extracted },
@@ -168,9 +235,9 @@ export function Intake() {
 
       const retested = active.filter(({ d }) => d.mode === 'retest').length;
       const created = active.length - retested;
-      toast(
-        [created && `logged ${created} new finding${created > 1 ? 's' : ''}`, retested && `recorded ${retested} re-test${retested > 1 ? 's' : ''}`]
-          .filter(Boolean).join(' and ')
+          toast(
+        [created && `logged ${created} new finding${created > 1 ? 's' : ''}`, retested && `recorded ${retested} re-test${retested > 1 ? 's' : ''}`, shotEvidence.length && `${shotEvidence.length} screenshot${shotEvidence.length > 1 ? 's' : ''}`]
+          .filter(Boolean).join(' · ')
           .replace(/^./, (c) => c.toUpperCase()) + (file ? ` · report ${reportId}` : ''),
         'good',
       );
@@ -265,6 +332,61 @@ export function Intake() {
             </div>
             {parsed.warnings.map((w, i) => <div key={i} className="text-sm mt-8 row gap-8" style={{ color: 'var(--warn)' }}><Icon name="alert" size={13} />{w}</div>)}
             {!online && <div className="text-sm mt-8 row gap-8 muted"><Icon name="alert" size={13} />The authoring server isn’t running, so this is saved as a local draft and the original document isn’t archived.</div>}
+          </Card>
+
+          <Card className="card--pad mb-16">
+            <div className="row row--between row--wrap gap-8 mb-12">
+              <div>
+                <div className="list__title row gap-8"><Icon name="eye" size={15} />Screenshots</div>
+                <div className="text-xs muted mt-4">Drop images here, click to browse, or paste (⌘V / Ctrl+V). Attached to every finding you log from this report.</div>
+              </div>
+              <Button size="sm" variant="ghost" icon="download" onClick={() => shotInput.current?.click()}>Add images</Button>
+              <input
+                ref={shotInput}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                multiple
+                hidden
+                onChange={(e) => { const list = [...(e.target.files ?? [])]; if (list.length) void addShots(list); e.target.value = ''; }}
+              />
+            </div>
+            <div
+              className={`shots${shotDragging ? ' shots--over' : ''}${shots.length ? ' shots--filled' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setShotDragging(true); }}
+              onDragLeave={() => setShotDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setShotDragging(false);
+                const list = [...(e.dataTransfer.files ?? [])];
+                if (list.length) void addShots(list);
+              }}
+              onClick={() => { if (!shots.length) shotInput.current?.click(); }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') shotInput.current?.click(); }}
+            >
+              {shots.length ? (
+                <div className="shots__grid" onClick={(e) => e.stopPropagation()}>
+                  {shots.map((s) => (
+                    <figure key={s.id} className="shots__item">
+                      <img src={s.preview} alt={s.name} />
+                      <figcaption className="truncate" title={s.name}>{s.name}</figcaption>
+                      <button type="button" className="shots__x" aria-label={`Remove ${s.name}`} onClick={() => removeShot(s.id)}>
+                        <Icon name="x" size={12} />
+                      </button>
+                    </figure>
+                  ))}
+                  <button type="button" className="shots__add" onClick={() => shotInput.current?.click()}>
+                    <Icon name="plus" size={16} />Add more
+                  </button>
+                </div>
+              ) : (
+                <div className="shots__empty">
+                  <Icon name="eye" size={22} strokeWidth={1.4} />
+                  <span>Drop proof screenshots here</span>
+                </div>
+              )}
+            </div>
           </Card>
 
           <div className="col gap-16">

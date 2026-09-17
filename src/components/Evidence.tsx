@@ -40,7 +40,8 @@ export function EvidenceViewer({ items }: { items: Evidence[] }) {
   return (
     <div className="evidence">
       {items.map((ev, i) => {
-        const url = ev.path ? data.evidence[ev.path] : undefined;
+        // Prefer the bundled/uploaded path; fall back to an inline url (clipboard / offline drafts).
+        const url = (ev.path && data.evidence[ev.path]) || (ev.type === 'screenshot' ? ev.url : undefined);
         return (
           <div className="evidence__item" key={i}>
             <div className="evidence__head">
@@ -53,7 +54,7 @@ export function EvidenceViewer({ items }: { items: Evidence[] }) {
                 <CodeBlock code={ev.content} language={ev.language ?? (ev.type === 'request' || ev.type === 'response' ? 'http' : ev.type === 'log' ? 'bash' : undefined)} file={ev.file} lines={ev.lines} highlight={ev.highlight} />
               )}
               {ev.type === 'screenshot' && url && <img className="evidence__img" src={url} alt={ev.title ?? 'screenshot'} onClick={() => setZoom(url)} loading="lazy" />}
-              {ev.type === 'screenshot' && !url && <div className="evidence__caption"><Icon name="eye" size={13} /> Screenshot: <span className="mono">{ev.path}</span> {ev.description}</div>}
+              {ev.type === 'screenshot' && !url && <div className="evidence__caption"><Icon name="eye" size={13} /> Screenshot: <span className="mono">{ev.path ?? 'missing'}</span> {ev.description}</div>}
               {ev.type === 'link' && ev.url && <div className="evidence__caption"><a href={ev.url} target="_blank" rel="noreferrer"><Icon name="external" size={12} /> {ev.url}</a></div>}
               {ev.txHash && <div className="evidence__caption mono">tx: {ev.txHash} {ev.chain && <Badge tone="neutral" size="sm">{ev.chain}</Badge>}</div>}
               {ev.description && ev.type !== 'screenshot' && <div className="evidence__caption">{ev.description}</div>}
