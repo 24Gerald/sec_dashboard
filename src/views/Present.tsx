@@ -6,13 +6,19 @@ import { Button } from '@/components/ui';
 import { Slide } from './present/Slides';
 import { autoDeck, SLIDE_TITLES } from './present/buildDeck';
 import type { Deck } from '@/types';
+import { DEFAULT_WINDOW_DAYS, loadWindowDays, saveWindowDays, windowActivity, WINDOW_OPTIONS, type WindowDays } from '@/lib/activity';
 
 export function Present() {
   const { data } = useStore();
   const nav = useNavigate();
-  const decks = useMemo<Deck[]>(() => [autoDeck(data), ...data.decks], [data]);
+  // 7 days by default; a wider window is remembered for today only.
+  const defaultDays = data.org.presentation?.windowDays ?? DEFAULT_WINDOW_DAYS;
+  const [days, setDays] = useState<WindowDays>(() => loadWindowDays(defaultDays));
+  const scope = useMemo(() => windowActivity(data, days), [data, days]);
+  const decks = useMemo<Deck[]>(() => [autoDeck(data, days), ...data.decks], [data, days]);
   const [deckId, setDeckId] = useState(decks[0]?.id ?? 'auto');
   const deck = decks.find((d) => d.id === deckId) ?? decks[0];
+  const isAuto = deck.id === 'auto';
   const [idx, setIdx] = useState(0);
   const [overview, setOverview] = useState(false);
   const [notes, setNotes] = useState(false);
@@ -22,7 +28,9 @@ export function Present() {
   const go = useCallback((n: number) => setIdx(() => Math.max(0, Math.min(total - 1, n))), [total]);
   const exit = useCallback(() => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); nav('/'); }, [nav]);
 
-  useEffect(() => { setIdx(0); }, [deckId]);
+  useEffect(() => { setIdx(0); }, [deckId, days]);
+
+  const changeWindow = useCallback((value: WindowDays) => { setDays(value); saveWindowDays(value, defaultDays); }, [defaultDays]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -45,7 +53,7 @@ export function Present() {
   return (
     <div className="deck">
       <div className="deck__stage">
-        <Slide spec={cur} data={data} active={!overview} />
+        <Slide spec={cur} data={data} active={!overview} scope={isAuto ? scope : undefined} />
       </div>
 
       <div className="slide__progress" style={{ width: `${((idx + 1) / total) * 100}%` }} />
@@ -57,9 +65,16 @@ export function Present() {
               {decks.map((d) => <option key={d.id} value={d.id}>{d.id === 'auto' ? '⚡ Auto deck (live)' : d.title}</option>)}
             </select>
           )}
+          {isAuto && (
+            <select className="select select--sm" value={String(days)} onChange={(e) => changeWindow(e.target.value === 'null' ? null : Number(e.target.value))}
+              title="Which findings this deck presents — resets to the default each day" style={{ minWidth: 130 }}>
+              {WINDOW_OPTIONS.map((o) => <option key={String(o.days)} value={String(o.days)}>{o.label}</option>)}
+            </select>
+          )}
         </div>
         <div className="row gap-8" style={{ fontSize: 12 }}>
           <span className="upper muted">{SLIDE_TITLES[cur.kind] ?? cur.kind}</span>
+          {isAuto && days !== defaultDays && <span className="badge badge--warn badge--sm hide-mobile">window widened for today</span>}
         </div>
         <div className="deck__controls">
           <button className="btn btn--ghost btn--sm" onClick={() => setNotes((n) => !n)} title="Presenter notes (n)"><Icon name="file" size={14} /></button>

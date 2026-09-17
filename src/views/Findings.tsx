@@ -14,9 +14,12 @@ import type { Finding, Severity, FindingStatus } from '@/types';
 import { SEVERITIES, FINDING_STATUSES } from '@/types';
 import { SEVERITY_LABEL, STATUS_LABEL, STATUS_TONE, SEVERITY_ORDER, ENGAGEMENT_TYPE_LABEL } from '@/lib/severity';
 import { isOpen, isOverdue, dueDate, severityCounts } from '@/lib/metrics';
+import { DEFAULT_WINDOW_DAYS, isActiveIn, lastActivity } from '@/lib/activity';
+import { OUTCOME_LABEL } from '@/lib/intake/match';
 import { fmtDate, fmtMoney, relTime } from '@/lib/format';
 
-type Sort = 'severity' | 'recent' | 'due' | 'cvss';
+type Sort = 'severity' | 'recent' | 'activity' | 'due' | 'cvss';
+type View = 'all' | 'open' | 'critical' | 'recent';
 
 export function Findings() {
   const { data } = useStore();
@@ -26,7 +29,7 @@ export function Findings() {
   const [sev, setSev] = useState<Severity | ''>((params.get('severity') as Severity) || '');
   const [status, setStatus] = useState<FindingStatus | ''>('');
   const [eng, setEng] = useState(params.get('engagement') ?? '');
-  const [view, setView] = useState<'all' | 'open' | 'critical'>('all');
+  const [view, setView] = useState<View>('all');
   const [sort, setSort] = useState<Sort>('severity');
   const [form, setForm] = useState(false);
 
@@ -34,6 +37,7 @@ export function Findings() {
     let list = data.findings;
     if (view === 'open') list = list.filter(isOpen);
     if (view === 'critical') list = list.filter((f) => f.severity === 'critical' || f.severity === 'high');
+    if (view === 'recent') list = list.filter((f) => isActiveIn(f, DEFAULT_WINDOW_DAYS));
     if (sev) list = list.filter((f) => f.severity === sev);
     if (status) list = list.filter((f) => f.status === status);
     if (eng) list = list.filter((f) => f.engagement === eng);
@@ -44,6 +48,7 @@ export function Findings() {
     const sorters: Record<Sort, (a: Finding, b: Finding) => number> = {
       severity: (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || (b.cvss?.score ?? 0) - (a.cvss?.score ?? 0),
       recent: (a, b) => +new Date(b.discovered) - +new Date(a.discovered),
+      activity: (a, b) => lastActivity(b).localeCompare(lastActivity(a)),
       due: (a, b) => +new Date(dueDate(a)) - +new Date(dueDate(b)),
       cvss: (a, b) => (b.cvss?.score ?? 0) - (a.cvss?.score ?? 0),
     };
@@ -54,8 +59,11 @@ export function Findings() {
 
   return (
     <div className="page">
-      <PageHeader eyebrow="Findings register" title="Findings" sub="Every vulnerability and issue the team has logged — click one to see how it can be exploited."
-        actions={<Button variant="primary" icon="plus" onClick={() => setForm(true)}>Log finding</Button>} />
+      <PageHeader eyebrow="Findings register" title="Findings" sub="Every vulnerability and issue the team has logged, with dates — click one to see how it can be exploited."
+        actions={<>
+          <Button icon="inbox" onClick={() => nav('/intake')}>Log from a report</Button>
+          <Button variant="primary" icon="plus" onClick={() => setForm(true)}>Log finding</Button>
+        </>} />
 
       <div className="grid grid--5 mb-16">
         {SEVERITIES.map((s) => (
@@ -68,14 +76,19 @@ export function Findings() {
       </div>
 
       <div className="toolbar">
-        <Segmented value={view} onChange={setView} options={[{ value: 'all', label: `All ${data.findings.length}` }, { value: 'open', label: 'Open' }, { value: 'critical', label: 'Crit/High' }]} />
+        <Segmented value={view} onChange={setView} options={[
+          { value: 'all', label: `All ${data.findings.length}` },
+          { value: 'open', label: 'Open' },
+          { value: 'critical', label: 'Crit/High' },
+          { value: 'recent', label: `Last ${DEFAULT_WINDOW_DAYS}d` },
+        ]} />
         <SearchInput value={q} onChange={setQ} placeholder="Search findings…" />
         <Select value={status} onChange={setStatus} options={FINDING_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] }))} all="Any status" />
         <Select value={eng} onChange={(v) => setEng(v)} options={data.engagements.map((e) => ({ value: e.id, label: e.title }))} all="Any engagement" />
         <div className="toolbar__spacer" />
         <label className="text-xs muted row gap-4">Sort
           <select className="select select--sm" value={sort} onChange={(e) => setSort(e.target.value as Sort)} style={{ minWidth: 110 }}>
-            <option value="severity">Severity</option><option value="recent">Most recent</option><option value="due">Due date</option><option value="cvss">CVSS</option>
+            <option value="severity">Severity</option><option value="recent">Newest</option><option value="activity">Last activity</option><option value="due">Due date</option><option value="cvss">CVSS</option>
           </select>
         </label>
         <span className="toolbar__count">{filtered.length} shown</span>
@@ -85,7 +98,7 @@ export function Findings() {
         <Card pad={false}>
           <div className="table-wrap">
             <table className="table">
-              <thead><tr><th>Severity</th><th>Finding</th><th>Status</th><th className="num">CVSS</th><th>Assignee</th><th>Due</th></tr></thead>
+              <thead><tr><th>Severity</th><th>Finding</th><th>Status</th><th>Logged</th><th className="num">CVSS</th><th>Assignee</th><th>Due</th></tr></thead>
               <tbody>{filtered.map((f) => <FindingTableRow key={f.id} f={f} onNav={() => nav(`/findings/${f.id}`)} />)}</tbody>
             </table>
           </div>
@@ -146,6 +159,8 @@ export function FindingDetail() {
         {f.attack?.financialExposure ? <Badge tone="high"><Icon name="coins" size={12} />{fmtMoney(f.attack.financialExposure)} exposure</Badge> : null}
         {overdue && <Badge tone="crit"><Icon name="clock" size={12} />Overdue · was due {fmtDate(dueDate(f))}</Badge>}
         {f.source === 'soc-bot' && <Badge tone="accent"><Icon name="robot" size={12} />Auto-logged by SOC bot</Badge>}
+        {f.source === 'report-intake' && <Badge tone="accent"><Icon name="inbox" size={12} />Logged from a report{f.intake?.fileName ? ` · ${f.intake.fileName}` : ''}</Badge>}
+        {f.retests?.length ? <Badge tone="warn"><Icon name="repeat" size={12} />Re-tested {f.retests.length}× · last {fmtDate(f.retests[f.retests.length - 1].date)}</Badge> : null}
         {(f.tags ?? []).map((t) => <span key={t} className="chip">{t}</span>)}
       </div>
 
@@ -180,6 +195,7 @@ export function FindingDetail() {
               <dl className="detail-key">
                 <dt>Discovered</dt><dd>{fmtDate(f.discovered)}</dd>
                 {f.reported && <><dt>Reported</dt><dd>{fmtDate(f.reported)}</dd></>}
+                <dt>Last activity</dt><dd>{fmtDate(lastActivity(f))}</dd>
                 <dt>Due</dt><dd style={{ color: overdue ? 'var(--crit)' : undefined }}>{fmtDate(dueDate(f))}</dd>
                 {f.fixedAt && <><dt>Fixed</dt><dd>{fmtDate(f.fixedAt)}</dd></>}
                 {f.reporter && <><dt>Reporter</dt><dd>{index.memberById.get(f.reporter)?.name ?? f.reporter}</dd></>}
@@ -194,6 +210,26 @@ export function FindingDetail() {
             {f.assets?.length ? (
               <Card title="Affected assets">
                 <div className="chips">{f.assets.map((a) => { const asset = index.assetById.get(a); return <Link key={a} to="/assets" className="chip"><Icon name="layers" size={12} />{asset?.name ?? a}</Link>; })}</div>
+              </Card>
+            ) : null}
+            {f.retests?.length ? (
+              <Card title="Re-tests" sub="Each time this same issue was tested again">
+                <div className="col gap-8">
+                  {[...f.retests].reverse().map((r, i) => (
+                    <div key={i} className="list__item" style={{ paddingTop: i ? 10 : 0 }}>
+                      <span className="list__icon" style={{ width: 26, height: 26 }}><Icon name="repeat" size={13} /></span>
+                      <div className="list__body">
+                        <div className="row gap-8 row--wrap">
+                          <b className="text-sm">{fmtDate(r.date)}</b>
+                          <Badge tone={r.outcome === 'resolved' ? 'good' : r.outcome === 'still-present' ? 'crit' : 'warn'} size="sm">{OUTCOME_LABEL[r.outcome]}</Badge>
+                          {r.by && <span className="text-xs muted">{index.memberById.get(r.by)?.name ?? r.by}</span>}
+                        </div>
+                        {r.note && <div className="text-xs muted mt-4">{r.note}</div>}
+                        {r.reportId && <Link to={`/reports/${r.reportId}`} className="text-xs row gap-4 mt-4"><Icon name="file" size={11} />{r.reportId}</Link>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </Card>
             ) : null}
             {f.timeline?.length ? (

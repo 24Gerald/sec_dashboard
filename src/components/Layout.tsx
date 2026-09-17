@@ -24,6 +24,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { to: '/', label: 'Command centre', icon: 'dashboard', group: 'Overview' },
     { to: '/engagements', label: 'Engagements', icon: 'target', count: data.engagements.length },
     { to: '/findings', label: 'Findings', icon: 'bug', count: openFindings },
+    { to: '/intake', label: 'Log a report', icon: 'inbox' },
     { to: '/simulator', label: 'Attack simulator', icon: 'crosshair', group: 'Analysis' },
     { to: '/assets', label: 'Assets', icon: 'layers', count: data.assets.length },
     { to: '/timeline', label: 'Timeline', icon: 'activity' },

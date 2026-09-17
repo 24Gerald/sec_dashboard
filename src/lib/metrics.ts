@@ -120,12 +120,23 @@ export function totalHours(d: Dataset): number {
   return Math.round(eng + fin + tsk);
 }
 
-export interface ActivityItem { id: string; date: string; kind: 'finding' | 'fix' | 'task' | 'engagement' | 'soc' | 'build' | 'report'; title: string; detail?: string; severity?: Severity; href?: string }
+const RETEST_DETAIL: Record<string, string> = {
+  'still-present': 'Re-tested — still present',
+  resolved: 'Re-tested — fix confirmed',
+  'partially-fixed': 'Re-tested — partially fixed',
+  inconclusive: 'Re-tested — inconclusive',
+};
+
+export interface ActivityItem { id: string; date: string; kind: 'finding' | 'fix' | 'task' | 'engagement' | 'soc' | 'build' | 'report' | 'retest'; title: string; detail?: string; severity?: Severity; href?: string }
 export function activityFeed(d: Dataset, limit = 30): ActivityItem[] {
   const items: ActivityItem[] = [];
   for (const f of d.findings) {
     items.push({ id: `f-${f.id}`, date: f.discovered, kind: 'finding', title: f.title, detail: `Finding logged · ${f.id}`, severity: f.severity, href: `/findings/${f.id}` });
     if (f.fixedAt) items.push({ id: `fx-${f.id}`, date: f.fixedAt, kind: 'fix', title: f.title, detail: `Remediated · ${f.id}`, severity: f.severity, href: `/findings/${f.id}` });
+    (f.retests ?? []).forEach((r, i) => items.push({
+      id: `rt-${f.id}-${i}`, date: r.date, kind: 'retest', title: f.title,
+      detail: `${RETEST_DETAIL[r.outcome] ?? 'Re-tested'} · ${f.id}`, severity: f.severity, href: `/findings/${f.id}`,
+    }));
   }
   for (const t of d.tasks) if (t.completed) items.push({ id: `t-${t.id}`, date: t.completed, kind: 'task', title: t.title, detail: 'Task completed', href: '/tasks' });
   for (const e of d.engagements) {

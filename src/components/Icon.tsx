@@ -70,6 +70,8 @@ const P: Record<string, React.ReactNode> = {
   flag: <path d="M5 21V4h11l-2 4 2 4H5" />,
   sparkle: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />,
   hourglass: <path d="M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9" />,
+  repeat: <><path d="M4 11V9a3 3 0 013-3h13" /><path d="M17 3l3 3-3 3" /><path d="M20 13v2a3 3 0 01-3 3H4" /><path d="M7 21l-3-3 3-3" /></>,
+  inbox: <><path d="M3 13h5l1.5 3h5L16 13h5" /><path d="M5 5h14l2 8v5a1 1 0 01-1 1H4a1 1 0 01-1-1v-5z" /></>,
 };
 
 export interface IconProps extends React.SVGProps<SVGSVGElement> { name: string; size?: number }

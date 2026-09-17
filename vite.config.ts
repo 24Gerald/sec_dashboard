@@ -5,7 +5,11 @@ import { fileURLToPath, URL } from 'node:url';
 // The dashboard is a static build. Content under /content is bundled at build time
 // (see src/data/load.ts). During development, /api is proxied to the optional
 // authoring server (server/index.js) so the UI can write findings straight to disk.
+// GitHub Pages serves project sites under /<repo>/ — keep local/dev at `/`.
+const base = process.env.GITHUB_PAGES === '1' ? '/sec_dashboard/' : '/';
+
 export default defineConfig({
+  base,
   plugins: [react()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: {

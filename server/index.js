@@ -12,8 +12,8 @@
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
-import { join, extname } from 'node:path';
-import { mkdirSync, existsSync } from 'node:fs';
+import { join, extname, dirname } from 'node:path';
+import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { CONTENT, ROOT, loadDataset, saveRecord, deleteRecord, validateDataset, KIND_FOLDER, sanitize } from './content.js';
 
 const PORT = process.env.PORT || 8787;
@@ -64,6 +64,20 @@ app.delete('/api/:kind/:id', (req, res) => {
   const removed = deleteRecord(kind, id);
   broadcast(`${kind}:deleted`);
   res.json({ ok: true, removed });
+});
+
+// --- Report bodies: the markdown a Report record points at (used by report intake) ---
+app.post('/api/report-file', (req, res) => {
+  const { id, body } = req.body || {};
+  if (!id || typeof body !== 'string' || !body.trim()) return res.status(400).json({ ok: false, error: 'id and body are required' });
+  const file = `${sanitize(id)}.md`;
+  const path = join(CONTENT, 'reports', file);
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body.endsWith('\n') ? body : `${body}\n`);
+    broadcast('report:file');
+    res.json({ ok: true, file, path: `content/reports/${file}` });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e.message || e) }); }
 });
 
 // --- Evidence upload ---

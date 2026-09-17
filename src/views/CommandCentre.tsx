@@ -12,6 +12,7 @@ import {
   isOpen, riskIndex, riskLabel, severityCounts, findingsByMonth, mttrDays, remediationRate,
   activityFeed, topRisks, totalHours, coverage,
 } from '@/lib/metrics';
+import { DEFAULT_WINDOW_DAYS, windowActivity } from '@/lib/activity';
 import { SEVERITY_LABEL, ENGAGEMENT_TYPE_LABEL } from '@/lib/severity';
 import { fmtNum, relTime, plural } from '@/lib/format';
 
@@ -32,6 +33,7 @@ export function CommandCentre() {
   const activeEng = data.engagements.filter((e) => e.status === 'in-progress' || e.status === 'ongoing');
   const criticalOpen = open.filter((x) => x.severity === 'critical').length;
   const hours = totalHours(data);
+  const recent = windowActivity(data, DEFAULT_WINDOW_DAYS);
 
   return (
     <div className="page">
@@ -47,7 +49,8 @@ export function CommandCentre() {
         sub="Live posture across every engagement, finding and build — past, present and planned."
         actions={<>
           <Link to="/present" className="btn"><Icon name="presentation" size={15} />Present</Link>
-          <Button variant="primary" icon="plus" onClick={() => setShowForm(true)}>Log finding</Button>
+          <Button icon="plus" onClick={() => setShowForm(true)}>Log finding</Button>
+          <Link to="/intake" className="btn btn--primary"><Icon name="inbox" size={15} />Log a report</Link>
         </>}
       />
 
@@ -123,6 +126,13 @@ export function CommandCentre() {
           ) : <Empty title="No activity yet" />}
         </Card>
         <div className="col gap-16">
+          <Card title={recent.label} sub="What the presentation shows by default" actions={<Link to="/present" className="btn btn--ghost btn--sm">Present<Icon name="chevron-right" size={14} /></Link>}>
+            <div className="grid grid--3" style={{ gap: 8 }}>
+              <Stat label="Logged" value={recent.logged.length} icon="bug" />
+              <Stat label="Re-tested" value={recent.retested.length} icon="repeat" />
+              <Stat label="Resolved" value={recent.resolved.length} icon="shield-check" tone="good" />
+            </div>
+          </Card>
           <Card title="Active engagements" actions={<Link to="/engagements" className="btn btn--ghost btn--sm">All</Link>}>
             {activeEng.length ? activeEng.slice(0, 4).map((e) => (
               <Link key={e.id} to={`/engagements/${e.id}`} className="list__item list__item--link">
@@ -154,6 +164,6 @@ export function CommandCentre() {
 }
 
 function FeedIcon({ kind }: { kind: string }) {
-  const map: Record<string, string> = { finding: 'bug', fix: 'shield-check', task: 'check', engagement: 'target', soc: 'radar', build: 'wrench', report: 'file' };
+  const map: Record<string, string> = { finding: 'bug', fix: 'shield-check', task: 'check', engagement: 'target', soc: 'radar', build: 'wrench', report: 'file', retest: 'repeat' };
   return <Icon name={map[kind] ?? 'activity'} size={13} style={{ color: 'var(--ink-3)', flex: '0 0 auto' }} />;
 }

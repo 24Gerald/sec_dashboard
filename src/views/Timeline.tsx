@@ -9,8 +9,8 @@ import { activityFeed, findingsByMonth } from '@/lib/metrics';
 import { fmtDate, fmtMonth } from '@/lib/format';
 import { ENGAGEMENT_STATUS_TONE, ENGAGEMENT_STATUS_LABEL, tense } from '@/lib/severity';
 
-const KIND_ICON: Record<string, string> = { finding: 'bug', fix: 'shield-check', task: 'check', engagement: 'target', soc: 'radar', build: 'wrench', report: 'file' };
-const KIND_COLOR: Record<string, string> = { finding: 'crit', fix: 'good', task: 'accent', engagement: 'warn', soc: 'accent', build: 'good', report: 'accent' };
+const KIND_ICON: Record<string, string> = { finding: 'bug', fix: 'shield-check', task: 'check', engagement: 'target', soc: 'radar', build: 'wrench', report: 'file', retest: 'repeat' };
+const KIND_COLOR: Record<string, string> = { finding: 'crit', fix: 'good', task: 'accent', engagement: 'warn', soc: 'accent', build: 'good', report: 'accent', retest: 'warn' };
 
 export function Timeline() {
   const { data } = useStore();

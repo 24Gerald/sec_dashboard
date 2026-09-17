@@ -40,6 +40,8 @@ export interface Store {
   discardAllDrafts: () => void;
   isDraft: (kind: RecordKind, id: string) => boolean;
   upload: (file: File, folder: string) => Promise<string | null>;
+  /** Write the markdown body a report record points at. Returns the file name, or null when offline. */
+  saveReportBody: (id: string, body: string) => Promise<string | null>;
   theme: 'dark' | 'light';
   toggleTheme: () => void;
   toasts: Toast[];
@@ -205,13 +207,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } catch { return null; }
   }, [online, refresh]);
 
+  const saveReportBody = useCallback(async (id: string, body: string): Promise<string | null> => {
+    if (!online) return null;
+    try {
+      const r = await fetch('/api/report-file', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, body }) });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return (j.file as string) ?? null;
+    } catch { return null; }
+  }, [online]);
+
   const data = useMemo(() => mergeDrafts(base, drafts), [base, drafts]);
   const index = useMemo(() => buildIndex(data), [data]);
   const memberName = useCallback((id?: string) => (id ? index.memberById.get(id)?.name ?? id : '—'), [index]);
   const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
 
   const value: Store = {
-    data, index, drafts, online, live, loading, lastSync, refresh, save, remove, discardDraft, discardAllDrafts, isDraft, upload,
+    data, index, drafts, online, live, loading, lastSync, refresh, save, remove, discardDraft, discardAllDrafts, isDraft, upload, saveReportBody,
     theme, toggleTheme, toasts, toast, memberName,
   };
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;

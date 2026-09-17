@@ -102,6 +102,8 @@ export interface Org {
   presentation?: {
     subtitle?: string;
     footer?: string;
+    /** Default rolling window (in days) the deck presents. Defaults to 7; null presents everything. */
+    windowDays?: number | null;
   };
 }
 
@@ -166,6 +168,37 @@ export interface Remediation {
   patchLanguage?: string;
 }
 
+/** Outcome of re-testing a finding that was already logged. */
+export type RetestOutcome = 'still-present' | 'resolved' | 'partially-fixed' | 'inconclusive';
+export const RETEST_OUTCOMES: RetestOutcome[] = ['still-present', 'resolved', 'partially-fixed', 'inconclusive'];
+
+/**
+ * One re-test of an existing finding. Written by the report intake when a
+ * submitted report is recognised as the same issue, so the day the retest
+ * happened still shows up as work even though no new finding was created.
+ */
+export interface Retest {
+  date: string;
+  outcome: RetestOutcome;
+  by?: string;
+  note?: string;
+  /** Report record holding the submitted document */
+  reportId?: string;
+  /** How the retest was recorded */
+  via?: 'intake' | 'manual';
+  /** Match confidence 0–1 when the intake matched this automatically */
+  confidence?: number;
+}
+
+/** Where an intake-created record came from. */
+export interface IntakeMeta {
+  fileName?: string;
+  fileType?: 'txt' | 'md' | 'pdf' | 'docx' | 'paste';
+  importedAt: string;
+  /** Fields the parser filled in, for transparency in the UI */
+  extracted?: string[];
+}
+
 export interface Finding {
   id: string;
   title: string;
@@ -207,8 +240,15 @@ export interface Finding {
   attack?: AttackMeta;
   timeline?: TimelineEvent[];
   effortHours?: number;
-  /** Set by the SOC bot when a finding is auto-created */
-  source?: 'manual' | 'soc-bot' | 'scanner' | 'import';
+  /** Re-tests of this same issue, newest last. */
+  retests?: Retest[];
+  /** Last day anything happened to this finding — drives the presentation window. */
+  lastActivity?: string;
+  /** Reports this finding was logged or re-tested from. */
+  reports?: string[];
+  /** Set by the SOC bot or the report intake when a finding is auto-created */
+  source?: 'manual' | 'soc-bot' | 'scanner' | 'import' | 'report-intake';
+  intake?: IntakeMeta;
   sample?: boolean;
 }
 
@@ -312,6 +352,9 @@ export interface Report {
   path: string;
   summary?: string;
   tags?: string[];
+  /** Finding this report logged or re-tested */
+  finding?: string;
+  intake?: IntakeMeta;
   sample?: boolean;
 }
 
@@ -336,7 +379,8 @@ export interface Build {
 
 export type SlideKind =
   | 'title' | 'agenda' | 'exec-summary' | 'kpis' | 'severity' | 'engagements' | 'engagement'
-  | 'finding' | 'simulation' | 'remediation' | 'roadmap' | 'team' | 'soc' | 'builds' | 'markdown' | 'closing';
+  | 'finding' | 'simulation' | 'remediation' | 'roadmap' | 'team' | 'soc' | 'builds' | 'markdown' | 'closing'
+  | 'activity';
 
 export interface SlideSpec {
   kind: SlideKind;

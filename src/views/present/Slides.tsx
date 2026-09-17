@@ -10,16 +10,23 @@ import {
   isOpen, severityCounts, riskIndex, riskLabel, remediationRate, mttrDays, findingsByMonth,
   coverage, totalHours, effortByMember,
 } from '@/lib/metrics';
-import { SEVERITY_LABEL, ENGAGEMENT_TYPE_LABEL, tense, ENGAGEMENT_STATUS_LABEL } from '@/lib/severity';
+import { SEVERITY_LABEL, ENGAGEMENT_TYPE_LABEL, tense, ENGAGEMENT_STATUS_LABEL, STATUS_LABEL } from '@/lib/severity';
 import { fmtNum, fmtDate, plural } from '@/lib/format';
+import { OUTCOME_LABEL } from '@/lib/intake/match';
+import type { WindowActivity } from '@/lib/activity';
 
-export function Slide({ spec, data, active }: { spec: SlideSpec; data: Dataset; active: boolean }) {
+/**
+ * `scope` is the presentation window (7 days by default). Finding-driven slides
+ * use it; program-level slides ignore it and always show the whole picture.
+ */
+export function Slide({ spec, data, active, scope }: { spec: SlideSpec; data: Dataset; active: boolean; scope?: WindowActivity }) {
   switch (spec.kind) {
     case 'title': return <TitleSlide spec={spec} data={data} />;
-    case 'agenda': return <AgendaSlide data={data} />;
-    case 'exec-summary': return <ExecSlide data={data} />;
-    case 'kpis': return <KpiSlide data={data} />;
-    case 'severity': return <SeveritySlide data={data} />;
+    case 'agenda': return <AgendaSlide data={data} scope={scope} />;
+    case 'activity': return <ActivitySlide data={data} scope={scope} />;
+    case 'exec-summary': return <ExecSlide data={data} scope={scope} />;
+    case 'kpis': return <KpiSlide data={data} scope={scope} />;
+    case 'severity': return <SeveritySlide data={data} scope={scope} />;
     case 'engagements': return <EngagementsSlide data={data} />;
     case 'simulation': return <SimulationSlide spec={spec} data={data} active={active} />;
     case 'remediation': return <RemediationSlide data={data} />;
@@ -63,8 +70,9 @@ function BigStat({ value, label }: { value: React.ReactNode; label: string }) {
   return <div><div className="num" style={{ fontSize: 'clamp(30px,3.6vw,52px)', fontWeight: 800, color: 'var(--accent-strong)', lineHeight: 1 }}>{value}</div><div className="text-sm muted upper" style={{ marginTop: 6 }}>{label}</div></div>;
 }
 
-function AgendaSlide({ data }: { data: Dataset }) {
+function AgendaSlide({ data, scope }: { data: Dataset; scope?: WindowActivity }) {
   const items = [
+    ...(scope && scope.days !== null ? [`What we did — ${scope.label.toLowerCase()} of security work`] : []),
     'Where we stand — security posture at a glance',
     'What we found — findings by severity and risk',
     `What we've done — ${plural(data.engagements.length, 'engagement')} across the program`,
@@ -79,8 +87,46 @@ function AgendaSlide({ data }: { data: Dataset }) {
   );
 }
 
-function ExecSlide({ data }: { data: Dataset }) {
-  const open = data.findings.filter(isOpen);
+function ActivitySlide({ data, scope }: { data: Dataset; scope?: WindowActivity }) {
+  if (!scope || scope.days === null) return <Frame eyebrow="Recent work" title="What we did"><div className="empty">No window selected.</div></Frame>;
+
+  type Entry = { key: string; date: string; label: string; title: string; tone: string };
+  const entries: Entry[] = [
+    ...scope.logged.map((f) => ({ key: `n-${f.id}`, date: f.discovered, label: 'Logged', title: f.title, tone: `var(--sev-${f.severity})` })),
+    ...scope.retested.map((r, i) => ({ key: `r-${i}`, date: r.retest.date, label: OUTCOME_LABEL[r.retest.outcome], title: r.finding.title, tone: 'var(--sev-high)' })),
+    ...scope.resolved.map((f) => ({ key: `d-${f.id}`, date: f.verifiedAt ?? f.fixedAt ?? f.discovered, label: 'Resolved', title: f.title, tone: 'var(--good)' })),
+  ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+
+  return (
+    <Frame eyebrow={`Recent work · ${scope.label.toLowerCase()}`} title="What we did">
+      <div className="grid grid--3 mb-16">
+        <SlideStat value={scope.logged.length} label="Findings logged" tone="var(--accent-strong)" />
+        <SlideStat value={scope.retested.length} label="Issues re-tested" tone="var(--sev-high)" />
+        <SlideStat value={scope.resolved.length} label="Confirmed resolved" tone="var(--good)" />
+      </div>
+      {entries.length ? (
+        <div className="col gap-8">
+          {entries.map((e) => (
+            <div key={e.key} className="row gap-12" style={{ fontSize: 'clamp(13px,1.3vw,18px)' }}>
+              <span className="badge__dot" style={{ background: e.tone, width: 10, height: 10 }} />
+              <span className="muted num" style={{ minWidth: 110 }}>{fmtDate(e.date, { day: 'numeric', month: 'short' })}</span>
+              <b style={{ minWidth: 130 }}>{e.label}</b>
+              <span className="truncate">{e.title}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="slide__sub">Nothing logged in this window yet — {plural(data.findings.length, 'finding')} remain on the register.</div>
+      )}
+    </Frame>
+  );
+}
+
+function ExecSlide({ data, scope }: { data: Dataset; scope?: WindowActivity }) {
+  const windowed = !!scope && scope.days !== null;
+  const scoped = scope?.findings ?? data.findings;
+  const open = scoped.filter(isOpen);
+  const openAll = data.findings.filter(isOpen).length;
   const risk = riskIndex(data.findings);
   const rl = riskLabel(risk);
   const counts = severityCounts(open);
@@ -88,7 +134,7 @@ function ExecSlide({ data }: { data: Dataset }) {
   const remPct = rem.total ? Math.round((rem.done / rem.total) * 100) : 0;
   const cov = coverage(data);
   return (
-    <Frame eyebrow="Executive summary" title="Where we stand">
+    <Frame eyebrow={windowed ? `Executive summary · ${scope!.label.toLowerCase()}` : 'Executive summary'} title="Where we stand">
       <div className="grid grid--2 gap-24" style={{ alignItems: 'center' }}>
         <div className="col gap-16">
           <div className="row gap-16" style={{ alignItems: 'center' }}>
@@ -100,7 +146,8 @@ function ExecSlide({ data }: { data: Dataset }) {
           </div>
         </div>
         <ul className="slide__list" style={{ fontSize: 'clamp(15px,1.5vw,21px)' }}>
-          <li><span><b>{open.length}</b> open findings{counts.critical ? <> — <b style={{ color: 'var(--sev-critical)' }}>{plural(counts.critical, 'critical')}</b></> : ' — none critical'}</span></li>
+          <li><span><b>{open.length}</b> open findings{windowed ? ` in the ${scope!.label.toLowerCase()}` : ''}{counts.critical ? <> — <b style={{ color: 'var(--sev-critical)' }}>{plural(counts.critical, 'critical')}</b></> : ' — none critical'}</span></li>
+          {windowed && <li><span><b>{openAll}</b> open across the whole programme</span></li>}
           <li><span><b>{remPct}%</b> of findings remediated or accepted</span></li>
           <li><span><b>{plural(data.engagements.length, 'engagement')}</b> run across <b>{cov.length}</b> security disciplines</span></li>
           <li><span><b>{fmtNum(totalHours(data))}</b> hours of security work logged</span></li>
@@ -110,15 +157,17 @@ function ExecSlide({ data }: { data: Dataset }) {
   );
 }
 
-function KpiSlide({ data }: { data: Dataset }) {
-  const open = data.findings.filter(isOpen);
+function KpiSlide({ data, scope }: { data: Dataset; scope?: WindowActivity }) {
+  const windowed = !!scope && scope.days !== null;
+  const scoped = scope?.findings ?? data.findings;
+  const open = scoped.filter(isOpen);
   const counts = severityCounts(open);
   const rem = remediationRate(data.findings);
   const mttr = mttrDays(data.findings);
   return (
-    <Frame eyebrow="Key metrics" title="The numbers">
+    <Frame eyebrow={windowed ? `Key metrics · ${scope!.label.toLowerCase()}` : 'Key metrics'} title="The numbers">
       <div className="grid grid--4">
-        <SlideStat value={data.findings.length} label="Total findings" tone="var(--accent-strong)" />
+        <SlideStat value={scoped.length} label={windowed ? 'Findings in window' : 'Total findings'} tone="var(--accent-strong)" />
         <SlideStat value={counts.critical + counts.high} label="Open crit / high" tone="var(--sev-high)" />
         <SlideStat value={`${rem.total ? Math.round((rem.done / rem.total) * 100) : 0}%`} label="Remediated" tone="var(--good)" />
         <SlideStat value={mttr ?? '—'} label="Avg days to fix" />
@@ -135,13 +184,15 @@ function SlideStat({ value, label, tone }: { value: React.ReactNode; label: stri
   return <div className="stat"><div className="stat__value num" style={{ color: tone }}>{value}</div><div className="stat__label">{label}</div></div>;
 }
 
-function SeveritySlide({ data }: { data: Dataset }) {
-  const open = data.findings.filter(isOpen);
+function SeveritySlide({ data, scope }: { data: Dataset; scope?: WindowActivity }) {
+  const windowed = !!scope && scope.days !== null;
+  const scoped = scope?.findings ?? data.findings;
+  const open = scoped.filter(isOpen);
   const counts = severityCounts(open);
-  const all = severityCounts(data.findings);
+  const all = severityCounts(scoped);
   const months = findingsByMonth(data.findings, 12);
   return (
-    <Frame eyebrow="Findings" title="By severity">
+    <Frame eyebrow={windowed ? `Findings · ${scope!.label.toLowerCase()}` : 'Findings'} title="By severity">
       <div className="grid grid--2 gap-24" style={{ alignItems: 'center' }}>
         <Donut size={230} thickness={30}
           data={(['critical', 'high', 'medium', 'low', 'info'] as const).filter((s) => counts[s] > 0).map((s) => ({ label: SEVERITY_LABEL[s], value: counts[s], color: `var(--sev-${s})` }))}
@@ -149,7 +200,7 @@ function SeveritySlide({ data }: { data: Dataset }) {
         <div>
           <div className="text-sm muted upper mb-8">Trend — discovered vs resolved</div>
           <LineChart data={months.map((m) => ({ label: m.label, Discovered: m.discovered, Resolved: m.resolved }))} series={[{ key: 'Discovered', label: 'Found', color: seriesColor(0) }, { key: 'Resolved', label: 'Fixed', color: seriesColor(2) }]} height={200} area />
-          <div className="text-sm muted mt-8">{all.critical + all.high} of {data.findings.length} findings were critical or high severity.</div>
+          <div className="text-sm muted mt-8">{all.critical + all.high} of {scoped.length} findings {windowed ? 'in this window are' : 'were'} critical or high severity.</div>
         </div>
       </div>
     </Frame>
@@ -170,11 +221,16 @@ function SimulationSlide({ spec, data, active }: { spec: SlideSpec; data: Datase
   const f = data.findings.find((x) => x.id === spec.ref);
   if (!f) return <Frame title="Attack walkthrough"><div className="empty">Finding not found</div></Frame>;
   const eng = f.engagement ? data.engagements.find((e) => e.id === f.engagement) : undefined;
+  const lastRetest = f.retests?.[f.retests.length - 1];
   return (
     <div className="slide">
       <div className="row row--between row--wrap gap-8">
         <div><div className="slide__eyebrow" style={{ color: 'var(--attacker)' }}>Attack walkthrough · how it plays out</div><h1 className="slide__title" style={{ fontSize: 'clamp(22px,2.8vw,38px)' }}>{f.title}</h1></div>
-        <Badge tone={f.severity} size="lg" dot>{SEVERITY_LABEL[f.severity]}</Badge>
+        <div className="row gap-8">
+          {lastRetest && <Badge tone="neutral" size="lg"><Icon name="repeat" size={14} />{plural(f.retests!.length, 're-test')} · {OUTCOME_LABEL[lastRetest.outcome].toLowerCase()} {fmtDate(lastRetest.date, { day: 'numeric', month: 'short' })}</Badge>}
+          <Badge tone="neutral" size="lg">{STATUS_LABEL[f.status]}</Badge>
+          <Badge tone={f.severity} size="lg" dot>{SEVERITY_LABEL[f.severity]}</Badge>
+        </div>
       </div>
       <div className="slide__body" style={{ marginTop: 8 }}>
         <AttackSimulation key={f.id + String(active)} finding={f} engagementType={eng?.type} autoPlay={active} present hideHeader />

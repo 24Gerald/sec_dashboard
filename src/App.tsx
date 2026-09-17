@@ -5,6 +5,7 @@ import { Toasts } from '@/components/Toasts';
 import { CommandCentre } from '@/views/CommandCentre';
 import { Engagements, EngagementDetail } from '@/views/Engagements';
 import { Findings, FindingDetail } from '@/views/Findings';
+import { Intake } from '@/views/Intake';
 import { Simulator } from '@/views/Simulator';
 import { Assets } from '@/views/Assets';
 import { Timeline } from '@/views/Timeline';
@@ -27,6 +28,7 @@ export function App() {
         <Route path="/engagements/:id" element={<EngagementDetail />} />
         <Route path="/findings" element={<Findings />} />
         <Route path="/findings/:id" element={<FindingDetail />} />
+        <Route path="/intake" element={<Intake />} />
         <Route path="/simulator" element={<Simulator />} />
         <Route path="/assets" element={<Assets />} />
         <Route path="/timeline" element={<Timeline />} />
