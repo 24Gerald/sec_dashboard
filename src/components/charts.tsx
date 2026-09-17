@@ -13,33 +13,31 @@ function Tooltip({ tip }: { tip: { x: number; y: number; content: React.ReactNod
 }
 
 export interface BarDatum { label: string; value: number; color?: string; sub?: string }
-/** Horizontal bar chart with direct value labels (works when a color sits below contrast floor). */
+/**
+ * Horizontal bar chart — HTML layout so labels never stretch when the chart
+ * is scaled to the slide width (SVG + preserveAspectRatio="none" was the bug).
+ */
 export function BarChart({ data, height, unit = '', valueFmt }: { data: BarDatum[]; height?: number; unit?: string; valueFmt?: (n: number) => string }) {
   const max = Math.max(1, ...data.map((d) => d.value));
-  const rowH = 30;
-  const h = height ?? data.length * rowH + 8;
-  const labelW = 116;
-  const { tip, show, hide } = useTooltip();
   const fmt = valueFmt ?? ((n: number) => `${n}${unit}`);
+  const rowH = 34;
+  const minH = height ?? Math.max(data.length * rowH + 8, 48);
   return (
-    <div className="viz">
-      <svg viewBox={`0 0 100 ${h}`} preserveAspectRatio="none" style={{ height: h }} role="img">
-        {data.map((d, i) => {
-          const y = i * rowH + 4;
-          const w = (d.value / max) * (100 - labelW / 6 - 10);
-          const bw = Math.max(0.6, w);
-          return (
-            <g key={i}>
-              <text x="0" y={y + rowH / 2} dominantBaseline="middle" className="label" style={{ fontSize: 4.6 }}>{d.label.length > 20 ? d.label.slice(0, 19) + '…' : d.label}</text>
-              <rect x={labelW / 6} y={y + 4} width={100 - labelW / 6 - 8} height={rowH - 12} fill="var(--bg-3)" rx="1.5" opacity="0.4" />
-              <rect x={labelW / 6} y={y + 4} width={bw} height={rowH - 12} fill={d.color ?? seriesColor(i)} rx="1.5"
-                onMouseMove={(e) => show(e.nativeEvent.offsetX, e.nativeEvent.offsetY, <><div className="tooltip__title">{d.label}</div><div className="tooltip__row"><span>{d.sub ?? 'Value'}</span><b>{fmt(d.value)}</b></div></>)} onMouseLeave={hide} style={{ cursor: 'default' }} />
-              <text x={labelW / 6 + bw + 1.5} y={y + rowH / 2} dominantBaseline="middle" className="label--strong" style={{ fontSize: 4.6 }}>{fmt(d.value)}</text>
-            </g>
-          );
-        })}
-      </svg>
-      <Tooltip tip={tip} />
+    <div className="viz viz--bars" style={{ minHeight: minH }} role="img" aria-label="Bar chart">
+      {data.length === 0 ? (
+        <div className="text-sm muted">Nothing to chart.</div>
+      ) : data.map((d, i) => {
+        const pct = Math.max(2, (d.value / max) * 100);
+        return (
+          <div className="bars__row" key={i} title={`${d.label}: ${fmt(d.value)}`}>
+            <span className="bars__label" title={d.label}>{d.label}</span>
+            <div className="bars__track">
+              <div className="bars__fill" style={{ width: `${pct}%`, background: d.color ?? seriesColor(i) }} />
+            </div>
+            <span className="bars__val num">{fmt(d.value)}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

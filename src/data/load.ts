@@ -4,8 +4,9 @@
  */
 import type { Dataset, Org, Engagement, Finding, Task, Asset, SocEvent, Report, Build, Deck } from '@/types';
 
-const jsonMods = import.meta.glob(['/content/**/*.json', '!/content/evidence/**'], { eager: true, import: 'default' }) as Record<string, unknown>;
-const mdMods = import.meta.glob('/content/**/*.md', { eager: true, query: '?raw', import: 'default' }) as Record<string, string>;
+// Sample seed lives under content/_sample/ and is excluded from the live bundle.
+const jsonMods = import.meta.glob(['/content/**/*.json', '!/content/evidence/**', '!/content/_sample/**'], { eager: true, import: 'default' }) as Record<string, unknown>;
+const mdMods = import.meta.glob(['/content/**/*.md', '!/content/_sample/**'], { eager: true, query: '?raw', import: 'default' }) as Record<string, string>;
 const evidenceMods = import.meta.glob('/content/evidence/**/*', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 
 const FOLDER_KIND: Record<string, keyof Omit<Dataset, 'org' | 'markdown' | 'evidence'>> = {

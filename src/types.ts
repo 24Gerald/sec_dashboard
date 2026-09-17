@@ -352,8 +352,10 @@ export interface Report {
   path: string;
   summary?: string;
   tags?: string[];
-  /** Finding this report logged or re-tested */
+  /** Primary finding this report logged or re-tested (legacy / convenience) */
   finding?: string;
+  /** All findings logged or re-tested from this report (one report → many findings) */
+  findings?: string[];
   intake?: IntakeMeta;
   sample?: boolean;
 }

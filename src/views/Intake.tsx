@@ -226,8 +226,16 @@ export function Intake() {
           path: file,
           engagement: eng,
           finding: firstFinding,
-          summary: parsed.candidates[0]?.draft.summary?.slice(0, 400),
-          tags: originalPath ? ['intake', 'original-attached'] : ['intake'],
+          findings: savedIds,
+          summary: parsed.candidates.length > 1
+            ? `${parsed.candidates.length} findings from one report — ${parsed.candidates.map((c) => c.draft.title).filter(Boolean).slice(0, 4).join('; ')}${parsed.candidates.length > 4 ? '…' : ''}`
+            : parsed.candidates[0]?.draft.summary?.slice(0, 400),
+          tags: [
+            'intake',
+            ...(originalPath ? ['original-attached'] : []),
+            ...(shotEvidence.length ? ['screenshots'] : []),
+            ...(savedIds.length > 1 ? ['multi-finding'] : []),
+          ],
           intake: { fileName: parsed.fileName, fileType: parsed.type, importedAt: new Date().toISOString() },
         };
         await save('report', report);

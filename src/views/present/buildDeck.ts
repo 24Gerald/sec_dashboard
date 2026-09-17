@@ -1,66 +1,111 @@
-import type { Dataset, SlideSpec, Deck } from '@/types';
-import { isOpen, severityCounts, riskIndex, riskLabel, remediationRate, coverage, topRisks, totalHours } from '@/lib/metrics';
+import type { Dataset, SlideSpec, Deck, Finding } from '@/types';
+import { isOpen, severityCounts, remediationRate } from '@/lib/metrics';
 import { plural } from '@/lib/format';
 import { DEFAULT_WINDOW_DAYS, windowActivity, type WindowActivity, type WindowDays } from '@/lib/activity';
+import { SEVERITY_ORDER } from '@/lib/severity';
 
 /**
- * Auto-generate a board-ready deck from the live dataset.
+ * Auto deck = the last N days of logged work only.
  *
- * Finding-driven slides only cover the presentation window (7 days by default),
- * so the deck is a record of recent work rather than the whole back catalogue.
- * Program-level slides — coverage, builds, roadmap, team — always show everything.
+ * No team roster, coverage catalogue, builds, SOC or roadmap filler —
+ * just what was found, why it matters, how it was proved, and where fixes stand.
  */
 export function autoDeck(data: Dataset, days: WindowDays = DEFAULT_WINDOW_DAYS): Deck {
   const scope = windowActivity(data, days);
-  const slides: SlideSpec[] = [];
-  const open = data.findings.filter(isOpen);
-  const risk = riskIndex(data.findings);
-  const counts = severityCounts(scope.findings.filter(isOpen));
-  const rem = remediationRate(data.findings);
-  const cov = coverage(data);
-  const risks = topRisks(scope.findings, 4);
-  const completed = data.engagements.filter((e) => e.status === 'completed').length;
-  const windowed = days !== null;
+  const findings = scope.findings
+    .slice()
+    .sort((a, b) => (SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]) || b.discovered.localeCompare(a.discovered));
 
-  slides.push({ kind: 'title', title: `${data.org.name} — Security Program Review` });
-  slides.push({ kind: 'agenda' });
-  if (windowed) {
+  const slides: SlideSpec[] = [];
+  const open = findings.filter(isOpen);
+  const counts = severityCounts(open);
+  const rem = remediationRate(findings);
+  const remPct = rem.total ? Math.round((rem.done / rem.total) * 100) : 0;
+  const label = scope.label;
+
+  slides.push({
+    kind: 'title',
+    title: `${data.org.name} — ${label} security review`,
+    notes: `${plural(findings.length, 'finding')} in scope · ${plural(open.length, 'still open')}`,
+  });
+
+  if (!findings.length) {
     slides.push({
       kind: 'activity',
-      notes: `${scope.logged.length} findings logged, ${scope.retested.length} re-tested and ${scope.resolved.length} confirmed resolved in the ${scope.label.toLowerCase()}.`,
+      notes: `Nothing logged in the ${label.toLowerCase()} yet.`,
+    });
+    slides.push({ kind: 'closing', notes: 'Log the next report and this deck fills itself.' });
+    return {
+      id: 'auto',
+      title: `${data.org.name} · ${label}`,
+      subtitle: `No findings in the ${label.toLowerCase()} yet`,
+      date: new Date().toISOString().slice(0, 10),
+      slides,
+    };
+  }
+
+  slides.push({ kind: 'agenda' });
+  slides.push({
+    kind: 'activity',
+    notes: `${scope.logged.length} logged · ${scope.retested.length} re-tested · ${scope.resolved.length} resolved`,
+  });
+  slides.push({
+    kind: 'exec-summary',
+    notes: `${open.length} open · ${counts.critical} critical · ${remPct}% remediated in window`,
+  });
+  slides.push({ kind: 'severity' });
+
+  // One briefing per finding (cap so the deck stays presentable), then a walkthrough for the worst.
+  const briefings = findings.slice(0, 8);
+  for (const f of briefings) {
+    slides.push({
+      kind: 'finding',
+      ref: f.id,
+      notes: briefNote(f),
     });
   }
-  slides.push({ kind: 'exec-summary', notes: `Risk index ${risk}/100 (${riskLabel(risk).label}). ${open.length} open findings in total, ${counts.critical} critical in this window. Remediation ${rem.total ? Math.round((rem.done / rem.total) * 100) : 0}%.` });
-  slides.push({ kind: 'kpis' });
-  if (scope.findings.length) slides.push({ kind: 'severity' });
-  slides.push({ kind: 'engagements', notes: `${completed} engagements completed across ${cov.length} activity types.` });
 
-  // one simulation slide per top risk — the headline feature for a non-technical audience
-  for (const f of risks) slides.push({ kind: 'simulation', ref: f.id, notes: `Walk through how ${f.title} could be exploited and its impact.` });
+  const walkthroughs = findings.filter((f) => f.severity === 'critical' || f.severity === 'high' || f.attack?.exploited).slice(0, 3);
+  for (const f of (walkthroughs.length ? walkthroughs : findings.slice(0, 1))) {
+    slides.push({ kind: 'simulation', ref: f.id, notes: `How an attacker exploits ${f.title}` });
+  }
 
   slides.push({ kind: 'remediation' });
-  if (data.builds.length) slides.push({ kind: 'builds' });
-  if (data.socEvents.length || data.org.soc) slides.push({ kind: 'soc' });
-  slides.push({ kind: 'roadmap' });
-  if (data.org.team.length) slides.push({ kind: 'team' });
   slides.push({ kind: 'closing', notes: 'Questions and next steps.' });
 
   return {
     id: 'auto',
-    title: `${data.org.name} Security Review`,
-    subtitle: data.org.presentation?.subtitle ?? deckSubtitle(scope, data, open.length),
+    title: `${data.org.name} · ${label}`,
+    subtitle: deckSubtitle(scope, findings, open.length, remPct),
     date: new Date().toISOString().slice(0, 10),
     slides,
   };
 }
 
-function deckSubtitle(scope: WindowActivity, data: Dataset, openTotal: number): string {
-  if (scope.days === null) return `${plural(openTotal, 'open finding')} · risk ${riskIndex(data.findings)}/100 · ${plural(totalHours(data), 'hour')} of work`;
-  return `${scope.label} · ${plural(scope.logged.length, 'finding')} logged · ${plural(scope.retested.length, 're-test')} · ${plural(scope.resolved.length, 'issue')} resolved`;
+function deckSubtitle(scope: WindowActivity, findings: Finding[], open: number, remPct: number): string {
+  return `${scope.label} · ${plural(findings.length, 'finding')} · ${plural(open, 'open')} · ${remPct}% remediated`;
+}
+
+function briefNote(f: Finding): string {
+  return `${f.severity} · ${f.status} · ${f.title}`;
 }
 
 export const SLIDE_TITLES: Record<string, string> = {
-  title: 'Title', agenda: 'Agenda', activity: 'Recent work', 'exec-summary': 'Executive summary', kpis: 'Key metrics', severity: 'Findings by severity',
-  engagements: 'Security coverage', simulation: 'Attack walkthrough', remediation: 'Remediation progress', roadmap: 'Roadmap',
-  team: 'The team', soc: 'Always-on monitoring', builds: 'What we built', closing: 'Thank you', engagement: 'Engagement', finding: 'Finding', markdown: 'Note',
+  title: 'Title',
+  agenda: 'Agenda',
+  activity: 'This period',
+  'exec-summary': 'Stakes',
+  kpis: 'Key metrics',
+  severity: 'Severity mix',
+  engagements: 'Coverage',
+  finding: 'Finding brief',
+  simulation: 'Attack walkthrough',
+  remediation: 'Fix progress',
+  roadmap: 'Roadmap',
+  team: 'Team',
+  soc: 'Monitoring',
+  builds: 'Builds',
+  closing: 'Close',
+  engagement: 'Engagement',
+  markdown: 'Note',
 };

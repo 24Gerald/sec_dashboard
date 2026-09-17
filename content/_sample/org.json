@@ -3,7 +3,7 @@
   "unit": "Security Team",
   "tagline": "Security Operations Center",
   "timezone": "UTC",
-  "sampleData": false,
+  "sampleData": true,
   "team": [
     { "id": "m-lead", "name": "Gerald Demitchy", "role": "Head of Security", "handle": "@gerald", "skills": ["Program leadership", "Threat modeling", "Smart contract audit", "Incident response"], "active": true, "bio": "Leads the ARK STUDIOS security program across product, infrastructure and on-chain." },
     { "id": "m-appsec", "name": "Amara Okonkwo", "role": "Application Security Engineer", "handle": "@amara", "skills": ["Web app pentest", "Code review", "API security", "Burp Suite"], "active": true, "bio": "Focuses on web and API security, secure code review and developer enablement." },
