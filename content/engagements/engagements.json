@@ -1,0 +1,128 @@
+[
+  {
+    "id": "ARK-E-2025-0001", "title": "Web Platform Vulnerability Assessment", "type": "vulnerability-assessment", "status": "completed",
+    "target": "ARK Studios Web Platform", "startDate": "2025-09-08", "endDate": "2025-09-19", "lead": "m-appsec", "team": ["m-appsec", "m-infra"],
+    "summary": "Authenticated and unauthenticated vulnerability assessment of the customer web platform and its supporting infrastructure. Covered the OWASP Top 10, authentication and session handling, access control, and common misconfigurations.",
+    "scope": ["app.arkstudios.example", "api.arkstudios.example", "AWS production surface"],
+    "objectives": ["Identify exploitable vulnerabilities before launch", "Validate authentication and access control", "Baseline the security posture"],
+    "methodology": ["OWASP WSTG", "Automated scanning (Nuclei, ZAP)", "Manual verification", "Authenticated + unauthenticated testing"],
+    "tools": ["Burp Suite Pro", "OWASP ZAP", "Nuclei", "sqlmap"],
+    "metrics": { "hoursSpent": 74, "endpointsTested": 128, "hostsScanned": 14 },
+    "highlights": ["Found and fixed a SQL injection before launch", "Hardened session cookies and CSP", "Established a monthly re-scan cadence"],
+    "reportId": "ARK-R-2025-0001", "tags": ["owasp", "web"]
+  },
+  {
+    "id": "ARK-E-2025-0002", "title": "Staking Vault Smart Contract Audit", "type": "smart-contract-audit", "status": "completed",
+    "target": "ARK Staking Vault", "startDate": "2025-10-06", "endDate": "2025-10-24", "lead": "m-chain", "team": ["m-chain", "m-lead"],
+    "summary": "Full security audit of the ARK Staking Vault contracts prior to mainnet deployment. Reviewed access control, arithmetic, external calls, reentrancy, and economic/oracle assumptions, with a Foundry test suite reproducing each finding.",
+    "scope": ["StakingVault.sol", "RewardDistributor.sol", "ARKToken.sol"],
+    "objectives": ["Prevent loss-of-funds vulnerabilities", "Verify access control on privileged functions", "Check economic assumptions and oracle usage"],
+    "methodology": ["Manual line-by-line review", "Foundry invariant + fuzz testing", "Slither static analysis", "Checks-Effects-Interactions review"],
+    "tools": ["Foundry", "Slither", "Echidna", "Mythril"],
+    "metrics": { "hoursSpent": 96, "contractsReviewed": 3, "linesOfCode": 1840, "testsWritten": 42 },
+    "highlights": ["Caught a critical reentrancy in withdraw()", "Caught a missing access-control modifier on setRewardRate()", "Delivered a full Foundry PoC suite"],
+    "reportId": "ARK-R-2025-0002", "tags": ["defi", "solidity", "audit"]
+  },
+  {
+    "id": "ARK-E-2025-0003", "title": "External Penetration Test", "type": "penetration-test", "status": "completed",
+    "target": "Internet-facing perimeter", "startDate": "2025-11-10", "endDate": "2025-11-21", "lead": "m-redteam", "team": ["m-redteam", "m-appsec"],
+    "summary": "Black-box external penetration test of the internet-facing perimeter and web applications, simulating an unauthenticated attacker. Focused on gaining an initial foothold and escalating access.",
+    "scope": ["Public IP ranges", "app.arkstudios.example", "admin.arkstudios.example", "Partner SSO"],
+    "objectives": ["Achieve initial access as an external attacker", "Test for authentication and authorization flaws", "Assess detection and response"],
+    "methodology": ["PTES", "OSINT & recon", "Exploitation", "Post-exploitation & privilege escalation"],
+    "tools": ["Nmap", "Burp Suite Pro", "ffuf", "Metasploit"],
+    "metrics": { "hoursSpent": 80, "hostsScanned": 62, "exploitedHosts": 3 },
+    "highlights": ["Reached the admin console via an authentication bypass", "Chained IDOR to access other tenants' data", "Response team detected activity on day 2"],
+    "reportId": "ARK-R-2025-0003", "tags": ["pentest", "external"]
+  },
+  {
+    "id": "ARK-E-2025-0004", "title": "Platform Load & Resilience Test", "type": "load-test", "status": "completed",
+    "target": "ARK Public API", "startDate": "2025-12-01", "endDate": "2025-12-05", "lead": "m-redteam", "team": ["m-redteam", "m-infra"],
+    "summary": "Load and stress testing of the public API to establish capacity limits and identify resource-exhaustion and availability risks under peak and abusive traffic.",
+    "scope": ["api.arkstudios.example", "Auth service", "PostgreSQL connection pool"],
+    "objectives": ["Establish the safe throughput ceiling", "Find resource-exhaustion bottlenecks", "Validate autoscaling and rate limiting"],
+    "methodology": ["k6 load profiles", "Soak & spike tests", "Bottleneck analysis", "Failure-mode observation"],
+    "tools": ["k6", "Grafana", "Locust"],
+    "metrics": { "hoursSpent": 34, "peakRps": 4200, "breakingPointRps": 520 },
+    "highlights": ["Found the DB connection pool exhausts at ~500 concurrent users", "Recommended autoscaling + bounded pools", "Established SLOs and alerting"],
+    "reportId": "ARK-R-2025-0004", "tags": ["performance", "resilience"]
+  },
+  {
+    "id": "ARK-E-2026-0005", "title": "Continuous Bug Hunt", "type": "bug-hunt", "status": "ongoing",
+    "target": "All production assets", "startDate": "2026-01-05", "lead": "m-appsec", "team": ["m-appsec", "m-chain", "m-redteam"],
+    "summary": "Ongoing internal bug-hunting program across all production assets, complementing scheduled engagements. Team members and an internal bounty surface log issues as they are found.",
+    "scope": ["Web platform", "API", "Mobile app", "Smart contracts"],
+    "objectives": ["Continuously surface issues between formal engagements", "Reward and track internal discoveries"],
+    "methodology": ["Ad-hoc manual testing", "Fuzzing", "Code review", "Triage & dedupe"],
+    "tools": ["Burp Suite", "Custom fuzzers", "Semgrep"],
+    "metrics": { "hoursSpent": 58, "bugsSubmitted": 11 },
+    "highlights": ["Surfaced an exposed API key in the mobile bundle", "Found a stored XSS in support tickets"],
+    "tags": ["bug-bounty", "continuous"]
+  },
+  {
+    "id": "ARK-E-2026-0006", "title": "Network Traffic Analysis", "type": "network-traffic-analysis", "status": "completed",
+    "target": "Corporate Network", "startDate": "2026-01-19", "endDate": "2026-01-23", "lead": "m-infra", "team": ["m-infra"],
+    "summary": "Passive and active analysis of corporate and production network traffic to identify cleartext protocols, weak TLS, unexpected egress, and segmentation gaps.",
+    "scope": ["Corporate LAN", "VPN", "Production VPC flow logs"],
+    "objectives": ["Find unencrypted sensitive traffic", "Identify segmentation gaps", "Baseline normal egress"],
+    "methodology": ["Passive capture (Wireshark/Zeek)", "TLS inspection", "Flow-log analysis", "Segmentation testing"],
+    "tools": ["Wireshark", "Zeek", "tcpdump", "nmap"],
+    "metrics": { "hoursSpent": 28, "flowsAnalyzed": 1400000, "protocolsFlagged": 4 },
+    "highlights": ["Found an internal admin panel served over plain HTTP", "Identified a flat network segment reaching production", "Baselined egress for anomaly detection"],
+    "reportId": "ARK-R-2026-0006", "tags": ["network", "traffic"]
+  },
+  {
+    "id": "ARK-E-2026-0007", "title": "Secure Code Review — Platform Monorepo", "type": "code-review", "status": "completed",
+    "target": "arkstudios/platform Repo", "startDate": "2026-02-02", "endDate": "2026-02-11", "lead": "m-appsec", "team": ["m-appsec", "m-lead"],
+    "summary": "Manual and tool-assisted secure code review of the platform monorepo, focused on injection, authentication/authorization, secrets handling, and dependency risk.",
+    "scope": ["packages/api", "packages/web", "CI/CD workflows"],
+    "objectives": ["Find vulnerabilities in source before release", "Review secrets handling and CI security", "Assess dependency & supply-chain risk"],
+    "methodology": ["Manual review of sensitive modules", "Semgrep rulesets", "Dependency audit", "CI/CD review"],
+    "tools": ["Semgrep", "gitleaks", "npm audit", "CodeQL"],
+    "metrics": { "hoursSpent": 52, "filesReviewed": 340, "rulesRun": 210 },
+    "highlights": ["Found weak password hashing (unsalted SHA-1)", "Found a vulnerable dependency with a known CVE", "Flagged an over-permissive CI token"],
+    "reportId": "ARK-R-2026-0007", "tags": ["sast", "code-review"]
+  },
+  {
+    "id": "ARK-E-2026-0008", "title": "Red Team — Phishing & Social Engineering", "type": "red-team", "status": "completed",
+    "target": "ARK Studios staff", "startDate": "2026-02-16", "endDate": "2026-02-27", "lead": "m-redteam", "team": ["m-redteam", "m-lead"],
+    "summary": "Authorised red-team exercise simulating a targeted phishing and social-engineering campaign against staff, to test human and technical controls and the response process.",
+    "scope": ["Email phishing", "Pretext calls", "Physical tailgating (office)"],
+    "objectives": ["Test resistance to phishing", "Assess MFA and email controls", "Measure detection & reporting"],
+    "methodology": ["OSINT target selection", "Credential-harvest phishing", "MFA-fatigue attempts", "Debrief & training"],
+    "tools": ["GoPhish", "Evilginx (lab)", "Custom lures"],
+    "metrics": { "hoursSpent": 46, "staffTargeted": 40, "credentialsCaptured": 6 },
+    "highlights": ["6 of 40 staff submitted credentials", "Phishing-resistant MFA blocked account takeover", "Drove passkey rollout and refresher training"],
+    "reportId": "ARK-R-2026-0008", "tags": ["phishing", "red-team", "awareness"]
+  },
+  {
+    "id": "ARK-E-2026-0009", "title": "Rewards Token Upgradeability Audit", "type": "smart-contract-audit", "status": "in-progress",
+    "target": "ARK Rewards Token (ARKT)", "startDate": "2026-03-02", "lead": "m-chain", "team": ["m-chain"],
+    "summary": "In-progress audit of the ARKT upgradeable (UUPS) proxy token, focused on initialization, storage layout, upgrade authorization and signature handling.",
+    "scope": ["ARKToken.sol", "ARKTokenProxy.sol"],
+    "objectives": ["Verify safe upgradeability", "Check initializer protection", "Review permit/signature handling"],
+    "methodology": ["Manual review", "Storage-layout diffing", "Foundry upgrade tests"],
+    "tools": ["Foundry", "Slither", "OpenZeppelin Upgrades"],
+    "metrics": { "hoursSpent": 22, "contractsReviewed": 2 },
+    "tags": ["defi", "upgradeability", "in-progress"]
+  },
+  {
+    "id": "ARK-E-2026-0010", "title": "Threat Model — Payment Flow", "type": "threat-model", "status": "planned",
+    "target": "Payment & checkout flow", "startDate": "2026-04-06", "lead": "m-lead", "team": ["m-lead", "m-appsec"],
+    "summary": "Planned STRIDE threat-modeling workshop for the new payment and checkout flow, to identify design-level risks before build.",
+    "scope": ["Checkout service", "Payment provider integration", "Webhook handling"],
+    "objectives": ["Identify design-level threats early", "Define required controls", "Feed requirements into the build"],
+    "methodology": ["STRIDE", "Data-flow diagrams", "Abuse cases"],
+    "tools": ["OWASP Threat Dragon"],
+    "tags": ["threat-model", "payments", "planned"]
+  },
+  {
+    "id": "ARK-E-2026-0011", "title": "Q2 External Penetration Test", "type": "penetration-test", "status": "scheduled",
+    "target": "Internet-facing perimeter", "startDate": "2026-05-11", "lead": "m-redteam", "team": ["m-redteam", "m-appsec"],
+    "summary": "Scheduled follow-up external penetration test to validate remediation from the November engagement and assess new features shipped since.",
+    "scope": ["Public perimeter", "New checkout flow", "Admin console"],
+    "objectives": ["Verify prior findings are fixed", "Test new attack surface"],
+    "methodology": ["PTES", "Retest of prior findings"],
+    "tags": ["pentest", "retest", "scheduled"]
+  }
+]

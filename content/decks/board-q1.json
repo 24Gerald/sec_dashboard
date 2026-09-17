@@ -1,0 +1,19 @@
+{
+  "id": "board-q1-2026",
+  "title": "Board Briefing — Q1 2026",
+  "subtitle": "Security posture, key risks and what we're doing about them.",
+  "date": "2026-03-15",
+  "presenter": "m-lead",
+  "audience": "board",
+  "sample": true,
+  "slides": [
+    { "kind": "title", "title": "ARK STUDIOS — Board Security Briefing", "notes": "Welcome. This is a 10-minute review of where our security stands and the few decisions we need from you." },
+    { "kind": "exec-summary", "notes": "Lead with reassurance: our biggest risks were caught before production. Then the honest picture of what's still open." },
+    { "kind": "kpis", "notes": "The headline numbers. Emphasise that critical issues are resolved or verified." },
+    { "kind": "simulation", "ref": "ARK-F-2025-0007", "notes": "Show the board how a reentrancy attack works in plain terms — the ATM analogy — and that we caught it before mainnet. This is the most powerful slide for a non-technical audience." },
+    { "kind": "simulation", "ref": "ARK-F-2026-0016", "notes": "Phishing: 15% of staff fell for it. Use this to justify the passkey rollout budget." },
+    { "kind": "remediation", "notes": "We fix what we find. Show the remediation rate and MTTR." },
+    { "kind": "roadmap", "notes": "The three asks: finish segmentation, complete MFA rollout, fund the Q2 pentest." },
+    { "kind": "closing", "notes": "Questions. Decisions needed: budget approval for passkeys and segmentation change window." }
+  ]
+}

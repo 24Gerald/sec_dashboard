@@ -1,0 +1,150 @@
+/* ==========================================================================
+   ARK STUDIOS Security Dashboard — design tokens
+   Dark is the default (ops-console). Light is an explicit, selected theme.
+
+   Data colours were validated with the dataviz palette validator against
+   both surfaces. Severity is a STATUS scale: it always ships with a text
+   label (never colour alone). Light-mode "medium" amber sits below 3:1 on
+   white by design, so severity charts always carry direct labels and a
+   table view (the relief rule).
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* surfaces & ink */
+  --bg-0: #0e1116;
+  --bg-1: #14141c;
+  --bg-2: #1b1c26;
+  --bg-3: #23242f;
+  --bg-4: #2b2c39;
+  --ink-1: #f2f3f7;
+  --ink-2: #b9bcc8;
+  --ink-3: #7f8394;
+  --ink-4: #5a5e6e;
+  --line-1: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.14);
+  --line-3: rgba(255, 255, 255, 0.24);
+  --grid: #262733;
+  --axis: #3a3b48;
+  --overlay: rgba(6, 8, 12, 0.72);
+
+  /* brand accent — UI chrome only, never a data series */
+  --accent: #22b8cf;
+  --accent-strong: #5fd4e6;
+  --accent-ink: #06171b;
+  --accent-soft: rgba(34, 184, 207, 0.14);
+  --accent-line: rgba(34, 184, 207, 0.45);
+
+  /* severity (status scale, validated on #14141c) */
+  --sev-critical: #e0483b;
+  --sev-high: #f29b1d;
+  --sev-medium: #f3e556;
+  --sev-low: #2f7fe0;
+  --sev-info: #8b8a93;
+  --sev-critical-soft: rgba(224, 72, 59, 0.16);
+  --sev-high-soft: rgba(242, 155, 29, 0.16);
+  --sev-medium-soft: rgba(243, 229, 86, 0.14);
+  --sev-low-soft: rgba(47, 127, 224, 0.16);
+  --sev-info-soft: rgba(139, 138, 147, 0.16);
+  --sev-medium-ink: #0f0f0f; /* text on medium chips in dark mode */
+
+  /* status (fixed) */
+  --good: #0ca30c;
+  --warn: #fab219;
+  --serious: #ec835a;
+  --crit: #d03b3b;
+  --good-soft: rgba(12, 163, 12, 0.16);
+  --warn-soft: rgba(250, 178, 25, 0.16);
+  --serious-soft: rgba(236, 131, 90, 0.16);
+  --crit-soft: rgba(208, 59, 59, 0.16);
+
+  /* categorical series (fixed order, validated dark) */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+
+  /* sequential (blue) */
+  --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5;
+  --seq-5: #256abf; --seq-6: #184f95; --seq-7: #0d366b;
+
+  /* attack-sim specific */
+  --attacker: #ff5c5c;
+  --attacker-soft: rgba(255, 92, 92, 0.18);
+  --defender: #22b8cf;
+  --blast: rgba(224, 72, 59, 0.10);
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line-1);
+  --shadow-2: 0 14px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--line-2);
+  --sidebar-w: 236px;
+  --topbar-h: 56px;
+  --content-max: 1480px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-0: #f3f4f7;
+  --bg-1: #fcfcfb;
+  --bg-2: #ffffff;
+  --bg-3: #eef0f4;
+  --bg-4: #e3e6ec;
+  --ink-1: #0b0b0b;
+  --ink-2: #3f4150;
+  --ink-3: #6b6e7e;
+  --ink-4: #9a9dab;
+  --line-1: rgba(11, 11, 11, 0.09);
+  --line-2: rgba(11, 11, 11, 0.16);
+  --line-3: rgba(11, 11, 11, 0.28);
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --overlay: rgba(20, 24, 34, 0.55);
+
+  --accent: #0e8fa3;
+  --accent-strong: #0b7688;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(14, 143, 163, 0.12);
+  --accent-line: rgba(14, 143, 163, 0.45);
+
+  --sev-critical: #a3221d;
+  --sev-high: #de6129;
+  --sev-medium: #e6b418;
+  --sev-low: #3b6fe8;
+  --sev-info: #6b6a74;
+  --sev-critical-soft: rgba(163, 34, 29, 0.12);
+  --sev-high-soft: rgba(222, 97, 41, 0.14);
+  --sev-medium-soft: rgba(230, 180, 24, 0.18);
+  --sev-low-soft: rgba(59, 111, 232, 0.12);
+  --sev-info-soft: rgba(107, 106, 116, 0.12);
+  --sev-medium-ink: #0f0f0f;
+
+  --good-soft: rgba(12, 163, 12, 0.12);
+  --warn-soft: rgba(250, 178, 25, 0.18);
+  --serious-soft: rgba(236, 131, 90, 0.16);
+  --crit-soft: rgba(208, 59, 59, 0.12);
+
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+
+  --attacker: #d22f2f;
+  --attacker-soft: rgba(210, 47, 47, 0.14);
+  --defender: #0e8fa3;
+  --blast: rgba(163, 34, 29, 0.08);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 0 1px var(--line-1);
+  --shadow-2: 0 14px 40px rgba(0, 0, 0, 0.14), 0 0 0 1px var(--line-2);
+}

